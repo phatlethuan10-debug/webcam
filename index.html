@@ -3,51 +3,51 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI 3D Fixed Camera</title>
+    <title>AI 3D Photo Booth - PRO</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-
     <style>
-        body { margin: 0; background: #111; color: white; font-family: sans-serif; overflow: hidden; }
-        #app { display: flex; width: 100vw; height: 100vh; }
-        #camera-side { flex: 3; position: relative; background: #000; }
-        #output_canvas { width: 100%; height: 100%; object-fit: contain; transform: scaleX(-1); } /* Flip video cho tự nhiên */
+        body { margin: 0; background: #000; color: white; font-family: sans-serif; overflow: hidden; }
+        #app { position: relative; width: 100vw; height: 100vh; display: flex; flex-direction: column; }
+        #cam-container { flex: 1; position: relative; overflow: hidden; display: flex; justify-content: center; }
+        /* Lật ngược canvas để trùng với tay thực tế (Mirror) */
+        canvas { transform: scaleX(-1); height: 100%; }
         video { display: none; }
-        #gallery-side { flex: 1; background: #1a1a1a; padding: 15px; border-left: 2px solid #333; overflow-y: auto; text-align: center; }
-        .thumb { width: 90%; margin-bottom: 15px; border: 3px solid #6366f1; border-radius: 8px; }
-        .info { position: absolute; top: 20px; left: 20px; background: rgba(0,0,0,0.8); padding: 15px; border-radius: 10px; z-index: 10; transform: scaleX(-1); /* Chống ngược chữ */ }
-        #export-btn { display: none; margin-top: 20px; padding: 15px 25px; background: #10b981; border: none; color: white; border-radius: 5px; cursor: pointer; width: 100%; }
+        
+        .ui-overlay { position: absolute; top: 20px; width: 100%; text-align: center; pointer-events: none; }
+        #countdown { font-size: 80px; font-weight: bold; color: #ff3e3e; display: none; }
+        .gallery-bar { height: 120px; background: #111; display: flex; justify-content: center; gap: 10px; padding: 10px; border-top: 1px solid #333; }
+        .thumb { height: 100px; border: 2px solid #6366f1; border-radius: 5px; transform: scaleX(-1); }
+        #status { background: rgba(99, 102, 241, 0.8); padding: 10px 20px; border-radius: 20px; font-weight: bold; }
     </style>
 </head>
 <body>
 
 <div id="app">
-    <div id="camera-side">
-        <div class="info">
-            <b style="color:#6366f1">CHẾ ĐỘ CHỤP 3D</b><br>
-            - Đưa 2 tay tạo khung<br>
-            - Chụm tay phải để lưu ảnh
-        </div>
+    <div class="ui-overlay">
+        <div id="status">Đang tìm 2 bàn tay...</div>
+        <div id="countdown">3</div>
+    </div>
+
+    <div id="cam-container">
         <video id="input_video"></video>
         <canvas id="output_canvas"></canvas>
     </div>
 
-    <div id="gallery-side">
-        <h3>ẢNH ĐÃ CHỤP (0/4)</h3>
-        <div id="thumbs-container"></div>
-        <button id="export-btn" onclick="exportStrip()">XUẤT FILE ẢNH</button>
-    </div>
+    <div class="gallery-bar" id="gallery">
+        </div>
 </div>
 
 <script>
     const videoElement = document.getElementById('input_video');
     const canvasElement = document.getElementById('output_canvas');
     const canvasCtx = canvasElement.getContext('2d');
-    const thumbsContainer = document.getElementById('thumbs-container');
-    const exportBtn = document.getElementById('export-btn');
-
+    const statusText = document.getElementById('status');
+    const countdownEl = document.getElementById('countdown');
+    
     let capturedFrames = [];
-    let lastPinch = 0;
+    let isCounting = false;
+    let timer = null;
 
     const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
     hands.setOptions({ maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.7, minTrackingConfidence: 0.7 });
@@ -64,111 +64,95 @@
         canvasElement.height = videoElement.videoHeight;
         
         canvasCtx.save();
-        // Vẽ video gốc
         canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
 
         if (results.multiHandLandmarks && results.multiHandLandmarks.length >= 2) {
-            // Sắp xếp tay trái/phải dựa trên tọa độ X để không bị nhảy khung
-            const sortedHands = [...results.multiHandLandmarks].sort((a, b) => a[0].x - b[0].x);
-            const handL = sortedHands[0]; 
-            const handR = sortedHands[1];
+            statusText.innerText = "Đã khớp khung! Giữ yên để chụp...";
+            
+            const h1 = results.multiHandLandmarks[0];
+            const h2 = results.multiHandLandmarks[1];
+            
+            // Lấy tọa độ ngón trỏ
+            const p1 = { x: h1[8].x * canvasElement.width, y: h1[8].y * canvasElement.height };
+            const p2 = { x: h2[8].x * canvasElement.width, y: h2[8].y * canvasElement.height };
 
-            const pL = { x: handL[8].x * canvasElement.width, y: handL[8].y * canvasElement.height };
-            const pR = { x: handR[8].x * canvasElement.width, y: handR[8].y * canvasElement.height };
+            const centerX = (p1.x + p2.x) / 2;
+            const centerY = (p1.y + p2.y) / 2;
+            const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+            const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
 
-            // Tính toán khung
-            const centerX = (pL.x + pR.x) / 2;
-            const centerY = (pL.y + pR.y) / 2;
-            const dist = Math.hypot(pR.x - pL.x, pR.y - pL.y);
-            const angle = Math.atan2(pR.y - pL.y, pR.x - pL.x);
-            const frameW = dist;
-            const frameH = dist * 0.7;
-
-            // Vẽ khung Preview
-            drawFrame(centerX, centerY, frameW, frameH, angle);
-
-            // Cử chỉ chụp: Chụm ngón tay của bàn tay bên phải
-            const thumbR = handR[4];
-            const indexR = handR[8];
-            const pinchDist = Math.hypot(thumbR.x - indexR.x, thumbR.y - indexR.y);
-
-            if (pinchDist < 0.04 && Date.now() - lastPinch > 2000 && capturedFrames.length < 4) {
-                captureExactly(centerX, centerY, frameW, frameH, angle);
-                lastPinch = Date.now();
+            draw3DFrame(centerX, centerY, dist, angle);
+            
+            if (!isCounting && capturedFrames.length < 4) {
+                startAutoCapture(centerX, centerY, dist, angle);
             }
+        } else {
+            statusText.innerText = "Hãy đưa cả 2 bàn tay lên!";
+            stopAutoCapture();
         }
         canvasCtx.restore();
     }
 
-    function drawFrame(x, y, w, h, angle) {
+    function draw3DFrame(x, y, dist, angle) {
         canvasCtx.save();
         canvasCtx.translate(x, y);
         canvasCtx.rotate(angle);
-        
-        // Vẽ viền khung kính
         canvasCtx.strokeStyle = "white";
-        canvasCtx.lineWidth = 8;
-        canvasCtx.strokeRect(-w/2, -h/2, w, h);
-        
-        // Hiệu ứng lóa sáng nhẹ
-        canvasCtx.fillStyle = "rgba(255,255,255,0.15)";
-        canvasCtx.fillRect(-w/2, -h/2, w, h);
-        
+        canvasCtx.lineWidth = 10;
+        canvasCtx.strokeRect(-dist/2, -(dist*0.7)/2, dist, dist*0.7);
+        canvasCtx.fillStyle = "rgba(255,255,255,0.2)";
+        canvasCtx.fillRect(-dist/2, -(dist*0.7)/2, dist, dist*0.7);
         canvasCtx.restore();
     }
 
-    function captureExactly(x, y, w, h, angle) {
-        // Tạo canvas tạm để cắt ảnh đúng góc nghiêng
+    function startAutoCapture(x, y, w, a) {
+        isCounting = true;
+        let count = 3;
+        countdownEl.style.display = 'block';
+        
+        timer = setInterval(() => {
+            count--;
+            countdownEl.innerText = count;
+            if (count <= 0) {
+                clearInterval(timer);
+                doCapture(x, y, w, a);
+                countdownEl.style.display = 'none';
+                isCounting = false;
+            }
+        }, 1000);
+    }
+
+    function stopAutoCapture() {
+        clearInterval(timer);
+        isCounting = false;
+        countdownEl.style.display = 'none';
+        countdownEl.innerText = "3";
+    }
+
+    function doCapture(x, y, dist, angle) {
+        const h = dist * 0.7;
         const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = w;
+        tempCanvas.width = dist;
         tempCanvas.height = h;
         const tCtx = tempCanvas.getContext('2d');
 
-        tCtx.translate(w/2, h/2);
-        tCtx.rotate(-angle); // Đảo ngược góc xoay để lấy ảnh thẳng
-        tCtx.drawImage(videoElement, -x, -y); // Di chuyển video về đúng tâm
+        tCtx.translate(dist/2, h/2);
+        tCtx.rotate(-angle);
+        // Vì canvas bị lật scaleX(-1), ta phải vẽ khéo léo để ảnh không bị ngược
+        tCtx.drawImage(videoElement, -x, -y);
 
         const dataUrl = tempCanvas.toDataURL();
         capturedFrames.push(dataUrl);
 
-        // Hiển thị ra Gallery
         const img = document.createElement('img');
         img.src = dataUrl;
         img.className = 'thumb';
-        thumbsContainer.appendChild(img);
-        
-        document.querySelector('#gallery-side h3').innerText = `ẢNH ĐÃ CHỤP (${capturedFrames.length}/4)`;
-        if (capturedFrames.length === 4) exportBtn.style.display = 'block';
-    }
+        document.getElementById('gallery').appendChild(img);
 
-    function exportStrip() {
-        const strip = document.createElement('canvas');
-        strip.width = 500;
-        strip.height = 1600;
-        const sCtx = strip.getContext('2d');
-
-        sCtx.fillStyle = "white";
-        sCtx.fillRect(0, 0, strip.width, strip.height);
-
-        let loaded = 0;
-        capturedFrames.forEach((src, i) => {
-            const img = new Image();
-            img.onload = () => {
-                // Vẽ ảnh vào dải (căn giữa)
-                sCtx.drawImage(img, 50, 50 + (i * 380), 400, 300);
-                sCtx.strokeStyle = "#333";
-                sCtx.strokeRect(50, 50 + (i * 380), 400, 300);
-                
-                loaded++;
-                if (loaded === 4) {
-                    const link = document.createElement('a');
-                    link.download = 'photobooth_3d.png';
-                    link.href = strip.toDataURL();
-                    link.click();
-                }
-            };
-            img.src = src;
-        });
+        if (capturedFrames.length === 4) {
+            localStorage.setItem('final_photos', JSON.stringify(capturedFrames));
+            window.open('result.html', '_blank'); // Mở web con
+        }
     }
 </script>
 </body>
