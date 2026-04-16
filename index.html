@@ -1,135 +1,47 @@
-<!DOCTYPE html>
-<html lang="vi">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI 3D Photo Booth - PRO</title>
-    <link rel="stylesheet" href="style.css">
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-    <style>
-        body { margin: 0; background: #000; color: white; font-family: sans-serif; overflow: hidden; }
-        #app { position: relative; width: 100vw; height: 100vh; display: flex; flex-direction: column; }
-        #cam-container { flex: 1; position: relative; overflow: hidden; display: flex; justify-content: center; }
-        /* Lật ngược canvas để trùng với tay thực tế (Mirror) */
-        canvas { transform: scaleX(-1); height: 100%; }
-        video { display: none; }
-        
-        .ui-overlay { position: absolute; top: 20px; width: 100%; text-align: center; pointer-events: none; }
-        #countdown { font-size: 80px; font-weight: bold; color: #ff3e3e; display: none; }
-        .gallery-bar { height: 120px; background: #111; display: flex; justify-content: center; gap: 10px; padding: 10px; border-top: 1px solid #333; }
-        .thumb { height: 100px; border: 2px solid #6366f1; border-radius: 5px; transform: scaleX(-1); }
-        #status { background: rgba(99, 102, 241, 0.8); padding: 10px 20px; border-radius: 20px; font-weight: bold; }
-    </style>
-</head>
-<body>
-
-<div id="app">
-    <div class="ui-overlay">
-        <div id="status">Đang tìm 2 bàn tay...</div>
-        <div id="countdown">3</div>
-    </div>
-
-    <div id="cam-container">
-        <video id="input_video"></video>
-        <canvas id="output_canvas"></canvas>
-    </div>
-
-    <div class="gallery-bar" id="gallery">
-        </div>
+<div class="controls">
+    <div class="shape-btn active" onclick="setShape('rect')">⬜</div>
+    <div class="shape-btn" onclick="setShape('circle')">◯</div>
+    <div class="shape-btn" onclick="setShape('triangle')">△</div>
 </div>
 
 <script>
-    const videoElement = document.getElementById('input_video');
-    const canvasElement = document.getElementById('output_canvas');
-    const canvasCtx = canvasElement.getContext('2d');
-    const statusText = document.getElementById('status');
-    const countdownEl = document.getElementById('countdown');
+    let currentShape = 'rect';
+    let retakeIndex = -1; // -1 là chụp mới, 0-3 là chụp lại ảnh tương ứng
     
-    let capturedFrames = [];
-    let isCounting = false;
-    let timer = null;
-
-    const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
-    hands.setOptions({ maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.7, minTrackingConfidence: 0.7 });
-    hands.onResults(onResults);
-
-    const camera = new Camera(videoElement, {
-        onFrame: async () => { await hands.send({image: videoElement}); },
-        width: 1280, height: 720
-    });
-    camera.start();
-
-    function onResults(results) {
-        canvasElement.width = videoElement.videoWidth;
-        canvasElement.height = videoElement.videoHeight;
-        
-        canvasCtx.save();
-        canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
-
-        if (results.multiHandLandmarks && results.multiHandLandmarks.length >= 2) {
-            statusText.innerText = "Đã khớp khung! Giữ yên để chụp...";
-            
-            const h1 = results.multiHandLandmarks[0];
-            const h2 = results.multiHandLandmarks[1];
-            
-            // Lấy tọa độ ngón trỏ
-            const p1 = { x: h1[8].x * canvasElement.width, y: h1[8].y * canvasElement.height };
-            const p2 = { x: h2[8].x * canvasElement.width, y: h2[8].y * canvasElement.height };
-
-            const centerX = (p1.x + p2.x) / 2;
-            const centerY = (p1.y + p2.y) / 2;
-            const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
-            const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
-
-            draw3DFrame(centerX, centerY, dist, angle);
-            
-            if (!isCounting && capturedFrames.length < 4) {
-                startAutoCapture(centerX, centerY, dist, angle);
-            }
-        } else {
-            statusText.innerText = "Hãy đưa cả 2 bàn tay lên!";
-            stopAutoCapture();
-        }
-        canvasCtx.restore();
+    function setShape(shape) {
+        currentShape = shape;
+        document.querySelectorAll('.shape-btn').forEach(btn => btn.classList.remove('active'));
+        event.target.classList.add('active');
     }
 
+    // Cập nhật hàm vẽ khung trong vòng lặp onResults
     function draw3DFrame(x, y, dist, angle) {
         canvasCtx.save();
         canvasCtx.translate(x, y);
         canvasCtx.rotate(angle);
         canvasCtx.strokeStyle = "white";
         canvasCtx.lineWidth = 10;
-        canvasCtx.strokeRect(-dist/2, -(dist*0.7)/2, dist, dist*0.7);
+        
+        canvasCtx.beginPath();
+        if (currentShape === 'rect') {
+            canvasCtx.rect(-dist/2, -(dist*0.7)/2, dist, dist*0.7);
+        } else if (currentShape === 'circle') {
+            canvasCtx.arc(0, 0, dist/2, 0, Math.PI * 2);
+        } else if (currentShape === 'triangle') {
+            canvasCtx.moveTo(0, -dist/2);
+            canvasCtx.lineTo(-dist/2, dist/2);
+            canvasCtx.lineTo(dist/2, dist/2);
+            canvasCtx.closePath();
+        }
+        
+        canvasCtx.stroke();
+        canvasCtx.clip(); // Cắt để tạo hiệu ứng kính
         canvasCtx.fillStyle = "rgba(255,255,255,0.2)";
-        canvasCtx.fillRect(-dist/2, -(dist*0.7)/2, dist, dist*0.7);
+        canvasCtx.fill();
         canvasCtx.restore();
     }
 
-    function startAutoCapture(x, y, w, a) {
-        isCounting = true;
-        let count = 3;
-        countdownEl.style.display = 'block';
-        
-        timer = setInterval(() => {
-            count--;
-            countdownEl.innerText = count;
-            if (count <= 0) {
-                clearInterval(timer);
-                doCapture(x, y, w, a);
-                countdownEl.style.display = 'none';
-                isCounting = false;
-            }
-        }, 1000);
-    }
-
-    function stopAutoCapture() {
-        clearInterval(timer);
-        isCounting = false;
-        countdownEl.style.display = 'none';
-        countdownEl.innerText = "3";
-    }
-
+    // Logic chụp ảnh và chụp lại
     function doCapture(x, y, dist, angle) {
         const h = dist * 0.7;
         const tempCanvas = document.createElement('canvas');
@@ -139,22 +51,44 @@
 
         tCtx.translate(dist/2, h/2);
         tCtx.rotate(-angle);
-        // Vì canvas bị lật scaleX(-1), ta phải vẽ khéo léo để ảnh không bị ngược
         tCtx.drawImage(videoElement, -x, -y);
 
         const dataUrl = tempCanvas.toDataURL();
-        capturedFrames.push(dataUrl);
 
-        const img = document.createElement('img');
-        img.src = dataUrl;
-        img.className = 'thumb';
-        document.getElementById('gallery').appendChild(img);
+        if (retakeIndex === -1) {
+            // Chụp mới
+            capturedFrames.push(dataUrl);
+        } else {
+            // Chụp đè lên ảnh cũ
+            capturedFrames[retakeIndex] = dataUrl;
+            retakeIndex = -1; // Reset về chế độ chụp mới
+        }
 
-        if (capturedFrames.length === 4) {
+        renderGallery();
+
+        if (capturedFrames.length === 4 && retakeIndex === -1) {
             localStorage.setItem('final_photos', JSON.stringify(capturedFrames));
-            window.open('result.html', '_blank'); // Mở web con
+            // Tự động chuyển hướng sang web con sau 1 giây
+            setTimeout(() => { window.location.href = 'result.html'; }, 1000);
         }
     }
+
+    function renderGallery() {
+        const container = document.getElementById('gallery');
+        container.innerHTML = '';
+        capturedFrames.forEach((src, index) => {
+            const img = document.createElement('img');
+            img.src = src;
+            img.className = 'thumb';
+            if (index === retakeIndex) img.classList.add('active-retake');
+            
+            // Nhấn vào ảnh để kích hoạt chế độ chụp lại
+            img.onclick = () => {
+                retakeIndex = index;
+                statusText.innerText = `Đang chụp lại ảnh số ${index + 1}...`;
+                renderGallery();
+            };
+            container.appendChild(img);
+        });
+    }
 </script>
-</body>
-</html>
