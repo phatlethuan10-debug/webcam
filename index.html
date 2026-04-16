@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Camera Hub</title>
+    <style>
+        :root {
+            --primary: #6366f1;
+            --dark: #0f172a;
+            --light: #f8fafc;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--dark);
+            color: var(--light);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        header {
+            padding: 2rem;
+            text-align: center;
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            max-width: 1000px;
+            width: 90%;
+            padding: 20px;
+        }
+
+        /* Thẻ tính năng */
+        .card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 20px;
+            text-align: center;
+            transition: transform 0.3s, background 0.3s;
+            cursor: pointer;
+        }
+
+        .card:hover {
+            transform: translateY(-10px);
+            background: rgba(255, 255, 255, 0.1);
+            border-color: var(--primary);
+        }
+
+        .card h3 { color: var(--primary); }
+
+        /* Khu vực hiển thị Camera */
+        #camera-zone {
+            display: none; /* Ẩn đi lúc đầu */
+            width: 100%;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+
+        canvas, video {
+            max-width: 100%;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            background: #000;
+        }
+
+        .btn-back {
+            margin-top: 20px;
+            padding: 10px 20px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+<header id="main-header">
+    <h1>KHO LƯU TRỮ CAMERA AI</h1>
+    <p>Chọn một trải nghiệm bên dưới</p>
+</header>
+
+<div class="container" id="home-screen">
+    <div class="card" onclick="startApp('pixel')">
+        <h3>1. Camera Pixel Art</h3>
+        <p>Chụp ảnh theo phong cách game 8-bit cổ điển.</p>
+    </div>
+    
+    <div class="card" onclick="startApp('magnify')">
+        <h3>2. Kính Lúp Gương Cầu</h3>
+        <p>Phóng to khuôn mặt bằng AI (Tính năng bạn đã chọn).</p>
+    </div>
+
+    <div class="card">
+        <h3>Sắp ra mắt...</h3>
+        <p>Các hiệu ứng thị giác khác đang được phát triển.</p>
+    </div>
+</div>
+
+<div id="camera-zone">
+    <h2 id="app-title">Đang tải...</h2>
+    <video id="video" autoplay playsinline style="display:none;"></video>
+    <canvas id="canvas"></canvas>
+    <button class="btn-back" onclick="goHome()">Quay lại trang chủ</button>
+</div>
+
+<script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    let currentMode = '';
+    let animationId;
+
+    async function startApp(mode) {
+        currentMode = mode;
+        document.getElementById('home-screen').style.display = 'none';
+        document.getElementById('main-header').style.display = 'none';
+        document.getElementById('camera-zone').style.display = 'flex';
+        
+        document.getElementById('app-title').innerText = 
+            mode === 'pixel' ? "Chế độ: Camera Pixel Art" : "Chế độ: Kính Lúp AI";
+
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        video.srcObject = stream;
+        
+        video.onloadedmetadata = () => {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            render();
+        };
+    }
+
+    function render() {
+        if (currentMode === 'pixel') {
+            drawPixelated();
+        } else if (currentMode === 'magnify') {
+            drawMagnifier(); // Đây là nơi sẽ code AI nhận diện mặt ở bước sau
+        }
+        animationId = requestAnimationFrame(render);
+    }
+
+    // Ý tưởng 1: Hiệu ứng Pixel Art
+    function drawPixelated() {
+        const size = 15; // Kích thước hạt pixel
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        // Kỹ thuật vẽ pixel bằng cách thu nhỏ rồi phóng to lại
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(canvas, 0, 0, canvas.width, canvas.height, 0, 0, canvas.width/size, canvas.height/size);
+        ctx.drawImage(canvas, 0, 0, canvas.width/size, canvas.height/size, 0, 0, canvas.width, canvas.height);
+    }
+
+    // Ý tưởng 2: Kính lúp (Tạm thời vẽ tĩnh giữa màn hình, chờ tích hợp AI)
+    function drawMagnifier() {
+        ctx.drawImage(video, 0, 0);
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        const radius = 100;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+        ctx.clip();
+        
+        // Vẽ vùng phóng to
+        ctx.drawImage(video, centerX - 50, centerY - 50, 100, 100, centerX - 100, centerY - 100, 200, 200);
+        ctx.restore();
+
+        // Vẽ viền
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = 5;
+        ctx.stroke();
+    }
+
+    function goHome() {
+        cancelAnimationFrame(animationId);
+        const stream = video.srcObject;
+        if (stream) stream.getTracks().forEach(track => track.stop());
+        
+        document.getElementById('home-screen').style.display = 'grid';
+        document.getElementById('main-header').style.display = 'block';
+        document.getElementById('camera-zone').style.display = 'none';
+    }
+</script>
+
+</body>
+</html>
