@@ -1,0 +1,118 @@
+/* Thiết lập chung */
+:root {
+    --primary-color: #6366f1;
+    --bg-dark: #0f172a;
+    --text-light: #f8fafc;
+    --accent: #10b981;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    background-color: var(--bg-dark);
+    color: var(--text-light);
+}
+
+/* --- STYLE CHO TRANG CHỦ (INDEX.HTML) --- */
+#app {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+#cam-container {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    background: #000;
+}
+
+#output_canvas {
+    height: 100%;
+    transform: scaleX(-1); /* Lật gương để không bị ngược tay */
+}
+
+.ui-overlay {
+    position: absolute;
+    top: 20px;
+    width: 100%;
+    z-index: 10;
+    text-align: center;
+    pointer-events: none;
+}
+
+#status {
+    background: rgba(0, 0, 0, 0.6);
+    padding: 8px 20px;
+    border-radius: 30px;
+    border: 1px solid var(--primary-color);
+    display: inline-block;
+}
+
+#countdown {
+    font-size: 120px;
+    font-weight: 900;
+    color: white;
+    text-shadow: 0 0 20px rgba(99, 102, 241, 0.8);
+    margin-top: 20vh;
+}
+
+/* --- STYLE CHO TRANG KẾT QUẢ (RESULT.HTML) --- */
+.result-page {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px;
+    min-height: 100vh;
+}
+
+/* Dải ảnh Photo Booth */
+.photo-strip {
+    background: white;
+    padding: 15px;
+    padding-bottom: 40px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+    border-radius: 4px;
+}
+
+.photo-strip img {
+    width: 320px;
+    height: 240px;
+    object-fit: cover;
+    display: block;
+    background: #eee;
+    /* Lưu ý: Nếu trang chủ đã lật gương, trang này có thể không cần lật lại */
+}
+
+/* Nút bấm */
+.btn-group {
+    margin-top: 30px;
+    display: flex;
+    gap: 15px;
+}
+
+.btn {
+    padding: 12px 25px;
+    border: none;
+    border-radius: 8px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: 0.3s;
+}
+
+.btn-download { background: var(--accent); color: white; }
+.btn-back { background: #475569; color: white; }
+.btn:hover { opacity: 0.8; transform: translateY(-2px); }
+
+/* Hiệu ứng in */
+@media print {
+    .btn-group, h1 { display: none; }
+    body { background: white; }
+    .photo-strip { box-shadow: none; padding: 0; }
+}
