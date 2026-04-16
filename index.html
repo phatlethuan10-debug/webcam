@@ -3,194 +3,163 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Camera Hub</title>
+    <title>AI Gesture Camera</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+
     <style>
-        :root {
-            --primary: #6366f1;
-            --dark: #0f172a;
-            --light: #f8fafc;
-        }
-
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: var(--dark);
-            color: var(--light);
-            margin: 0;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            min-height: 100vh;
-        }
-
-        header {
-            padding: 2rem;
-            text-align: center;
-        }
-
-        .container {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 2rem;
-            max-width: 1000px;
-            width: 90%;
-            padding: 20px;
-        }
-
-        /* Thẻ tính năng */
-        .card {
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 15px;
-            padding: 20px;
-            text-align: center;
-            transition: transform 0.3s, background 0.3s;
-            cursor: pointer;
-        }
-
-        .card:hover {
-            transform: translateY(-10px);
-            background: rgba(255, 255, 255, 0.1);
-            border-color: var(--primary);
-        }
-
-        .card h3 { color: var(--primary); }
-
-        /* Khu vực hiển thị Camera */
-        #camera-zone {
-            display: none; /* Ẩn đi lúc đầu */
-            width: 100%;
-            flex-direction: column;
-            align-items: center;
-            padding: 20px;
-        }
-
-        canvas, video {
-            max-width: 100%;
-            border-radius: 10px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-            background: #000;
-        }
-
-        .btn-back {
-            margin-top: 20px;
-            padding: 10px 20px;
-            background: var(--primary);
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-        }
+        :root { --primary: #6366f1; --dark: #0f172a; --light: #f8fafc; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--dark); color: var(--light); margin: 0; display: flex; flex-direction: column; align-items: center; }
+        header { padding: 2rem; text-align: center; }
+        .container { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 2rem; width: 90%; max-width: 1000px; }
+        .card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 15px; padding: 20px; text-align: center; cursor: pointer; transition: 0.3s; }
+        .card:hover { transform: translateY(-5px); background: rgba(255,255,255,0.1); border-color: var(--primary); }
+        
+        #camera-zone { display: none; width: 100%; flex-direction: column; align-items: center; padding: 20px; position: relative; }
+        .canvas-container { position: relative; display: inline-block; }
+        canvas { border-radius: 10px; max-width: 100%; background: #000; box-shadow: 0 0 20px rgba(99, 102, 241, 0.3); }
+        video { display: none; }
+        
+        .btn-back { margin-top: 20px; padding: 12px 25px; background: var(--primary); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
+        .status-badge { position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.6); padding: 5px 15px; border-radius: 20px; font-size: 12px; }
     </style>
 </head>
 <body>
 
 <header id="main-header">
-    <h1>KHO LƯU TRỮ CAMERA AI</h1>
-    <p>Chọn một trải nghiệm bên dưới</p>
+    <h1>CAMERA CỬ CHỈ AI</h1>
+    <p>Sử dụng ngón tay để tạo vùng chụp ảnh</p>
 </header>
 
 <div class="container" id="home-screen">
     <div class="card" onclick="startApp('pixel')">
         <h3>1. Camera Pixel Art</h3>
-        <p>Chụp ảnh theo phong cách game 8-bit cổ điển.</p>
+        <p>Hiệu ứng 8-bit cổ điển</p>
     </div>
-    
-    <div class="card" onclick="startApp('magnify')">
-        <h3>2. Kính Lúp Gương Cầu</h3>
-        <p>Phóng to khuôn mặt bằng AI (Tính năng bạn đã chọn).</p>
-    </div>
-
-    <div class="card">
-        <h3>Sắp ra mắt...</h3>
-        <p>Các hiệu ứng thị giác khác đang được phát triển.</p>
+    <div class="card" onclick="startApp('gesture')">
+        <h3>2. Kính Lúp Cử Chỉ</h3>
+        <p>Dùng ngón trỏ & cái để tạo vùng chụp (Giống ảnh mẫu)</p>
     </div>
 </div>
 
 <div id="camera-zone">
-    <h2 id="app-title">Đang tải...</h2>
-    <video id="video" autoplay playsinline style="display:none;"></video>
-    <canvas id="canvas"></canvas>
+    <div class="status-badge" id="status">Đang khởi tạo AI...</div>
+    <div class="canvas-container">
+        <video id="input_video"></video>
+        <canvas id="output_canvas"></canvas>
+    </div>
+    <p id="instruction" style="margin-top:15px; color: #aaa;">Mẹo: Chụm 2 ngón tay lại để chụp ảnh!</p>
     <button class="btn-back" onclick="goHome()">Quay lại trang chủ</button>
 </div>
 
 <script>
-    const video = document.getElementById('video');
-    const canvas = document.getElementById('canvas');
-    const ctx = canvas.getContext('2d');
+    const videoElement = document.getElementById('input_video');
+    const canvasElement = document.getElementById('output_canvas');
+    const canvasCtx = canvasElement.getContext('2d');
+    const statusBox = document.getElementById('status');
     let currentMode = '';
-    let animationId;
+    let lastPinchTime = 0;
+
+    // Cấu hình MediaPipe Hands
+    const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+    hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+    hands.onResults(onResults);
+
+    const camera = new Camera(videoElement, {
+        onFrame: async () => { await hands.send({image: videoElement}); },
+        width: 1280, height: 720
+    });
 
     async function startApp(mode) {
         currentMode = mode;
         document.getElementById('home-screen').style.display = 'none';
         document.getElementById('main-header').style.display = 'none';
         document.getElementById('camera-zone').style.display = 'flex';
-        
-        document.getElementById('app-title').innerText = 
-            mode === 'pixel' ? "Chế độ: Camera Pixel Art" : "Chế độ: Kính Lúp AI";
-
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        video.srcObject = stream;
-        
-        video.onloadedmetadata = () => {
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            render();
-        };
+        statusBox.innerText = "Đang mở Camera...";
+        camera.start();
     }
 
-    function render() {
+    function onResults(results) {
+        statusBox.innerText = "AI Sẵn sàng";
+        canvasElement.width = videoElement.videoWidth;
+        canvasElement.height = videoElement.videoHeight;
+        
+        canvasCtx.save();
+        canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+        
+        // Vẽ nền video gốc
+        canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
         if (currentMode === 'pixel') {
-            drawPixelated();
-        } else if (currentMode === 'magnify') {
-            drawMagnifier(); // Đây là nơi sẽ code AI nhận diện mặt ở bước sau
+            applyPixelEffect();
+        } else if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+            const landmarks = results.multiHandLandmarks[0];
+            
+            // Lấy tọa độ ngón trỏ (8) và ngón cái (4)
+            const thumb = landmarks[4];
+            const index = landmarks[8];
+            
+            // Tính điểm giữa và khoảng cách
+            const midX = ((thumb.x + index.x) / 2) * canvasElement.width;
+            const midY = ((thumb.y + index.y) / 2) * canvasElement.height;
+            const dist = Math.hypot(thumb.x - index.x, thumb.y - index.y);
+
+            // Vẽ kính lúp tại vị trí ngón tay
+            drawMagnifier(midX, midY, dist);
+
+            // Nếu chụm tay (pinch) - khoảng cách nhỏ
+            if (dist < 0.05 && Date.now() - lastPinchTime > 2000) {
+                takeSnapshot();
+                lastPinchTime = Date.now();
+            }
         }
-        animationId = requestAnimationFrame(render);
+        canvasCtx.restore();
     }
 
-    // Ý tưởng 1: Hiệu ứng Pixel Art
-    function drawPixelated() {
-        const size = 15; // Kích thước hạt pixel
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    function drawMagnifier(x, y, dist) {
+        const radius = 80 + (dist * 200); // Kính lúp to nhỏ theo độ mở ngón tay
         
-        // Kỹ thuật vẽ pixel bằng cách thu nhỏ rồi phóng to lại
-        ctx.imageSmoothingEnabled = false;
-        ctx.drawImage(canvas, 0, 0, canvas.width, canvas.height, 0, 0, canvas.width/size, canvas.height/size);
-        ctx.drawImage(canvas, 0, 0, canvas.width/size, canvas.height/size, 0, 0, canvas.width, canvas.height);
+        canvasCtx.save();
+        // Tạo vùng cắt hình tròn
+        canvasCtx.beginPath();
+        canvasCtx.arc(x, y, radius, 0, Math.PI * 2);
+        canvasCtx.clip();
+        
+        // Vẽ hình ảnh phóng to vào trong vùng cắt
+        canvasCtx.drawImage(videoElement, x - radius/2, y - radius/2, radius, radius, x - radius, y - radius, radius * 2, radius * 2);
+        canvasCtx.restore();
+
+        // Vẽ viền kính lúp
+        canvasCtx.strokeStyle = "white";
+        canvasCtx.lineWidth = 6;
+        canvasCtx.beginPath();
+        canvasCtx.arc(x, y, radius, 0, Math.PI * 2);
+        canvasCtx.stroke();
     }
 
-    // Ý tưởng 2: Kính lúp (Tạm thời vẽ tĩnh giữa màn hình, chờ tích hợp AI)
-    function drawMagnifier() {
-        ctx.drawImage(video, 0, 0);
-        const centerX = canvas.width / 2;
-        const centerY = canvas.height / 2;
-        const radius = 100;
+    function applyPixelEffect() {
+        const size = 15;
+        canvasCtx.imageSmoothingEnabled = false;
+        canvasCtx.drawImage(canvasElement, 0, 0, canvasElement.width, canvasElement.height, 0, 0, canvasElement.width/size, canvasElement.height/size);
+        canvasCtx.drawImage(canvasElement, 0, 0, canvasElement.width/size, canvasElement.height/size, 0, 0, canvasElement.width, canvasElement.height);
+    }
 
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-        ctx.clip();
+    function takeSnapshot() {
+        statusBox.style.background = "#ef4444";
+        statusBox.innerText = "ĐÃ CHỤP!";
+        setTimeout(() => { statusBox.style.background = "rgba(0,0,0,0.6)"; }, 500);
         
-        // Vẽ vùng phóng to
-        ctx.drawImage(video, centerX - 50, centerY - 50, 100, 100, centerX - 100, centerY - 100, 200, 200);
-        ctx.restore();
-
-        // Vẽ viền
-        ctx.strokeStyle = "white";
-        ctx.lineWidth = 5;
-        ctx.stroke();
+        // Tạo link tải ảnh
+        const link = document.createElement('a');
+        link.download = 'ai-gesture-photo.png';
+        link.href = canvasElement.toDataURL();
+        link.click();
     }
 
     function goHome() {
-        cancelAnimationFrame(animationId);
-        const stream = video.srcObject;
-        if (stream) stream.getTracks().forEach(track => track.stop());
-        
-        document.getElementById('home-screen').style.display = 'grid';
-        document.getElementById('main-header').style.display = 'block';
-        document.getElementById('camera-zone').style.display = 'none';
+        location.reload(); // Cách nhanh nhất để reset AI và Camera
     }
 </script>
-
 </body>
 </html>
